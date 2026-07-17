@@ -1,0 +1,158 @@
+# R Reference — Statistics Basics
+
+Docs: https://cran.r-project.org/doc/manuals/r-release/R-intro.html#Statistical-models
+
+Prerequisite: `r-data-structures.md`
+
+R was built by statisticians, for statistics — this file covers the
+built-in statistical functions that are one of R's core strengths relative
+to Python's data science stack.
+
+## Descriptive Statistics
+
+```r
+x <- c(4, 8, 15, 16, 23, 42)
+
+mean(x)              # average
+median(x)               # middle value
+sd(x)                       # standard deviation
+var(x)                          # variance
+range(x)                             # c(min, max)
+summary(x)                               # min, 1st quartile, median, mean, 3rd quartile, max — one-line overview
+quantile(x, probs = c(0.25, 0.5, 0.75))     # specific quantiles
+IQR(x)                                          # interquartile range
+```
+Same `na.rm = TRUE` caveat as `r-data-structures.md` — every function
+above needs it explicitly if the vector contains `NA` values, or the
+result will itself be `NA`.
+
+## Probability Distributions
+
+R's naming convention for distribution functions is consistent across all
+of them: a one-letter prefix + distribution name.
+```
+d<dist>()   density (the probability density/mass function)
+p<dist>()   cumulative probability (P(X <= x))
+q<dist>()   quantile (inverse of p<dist> — "what x gives this cumulative probability")
+r<dist>()   random sample generation
+```
+
+### Normal Distribution
+```r
+dnorm(0, mean = 0, sd = 1)          # density at x=0 for a standard normal
+pnorm(1.96, mean = 0, sd = 1)          # P(X <= 1.96) — roughly 0.975 for standard normal
+qnorm(0.975, mean = 0, sd = 1)            # the x value where P(X <= x) = 0.975 — roughly 1.96
+rnorm(100, mean = 0, sd = 1)                 # generate 100 random samples from a standard normal
+```
+The same `d`/`p`/`q`/`r` pattern applies to other distributions:
+`binom` (binomial), `pois` (Poisson), `unif` (uniform), `t` (Student's t),
+`chisq` (chi-squared), `f` (F-distribution) — e.g. `rbinom()`, `pt()`,
+`qchisq()`, etc.
+
+### Reproducibility
+```r
+set.seed(42)          # seeds R's random number generator — same underlying concept as
+                          # np.random.seed()/default_rng(seed=) in numpy-linear-algebra-random.md
+rnorm(5)
+```
+
+## Correlation
+
+```r
+cor(df$age, df$income)                          # Pearson correlation coefficient (default)
+cor(df$age, df$income, method = "spearman")         # Spearman rank correlation (for non-linear/ordinal relationships)
+cor(df[, c("age", "income", "score")])                 # correlation matrix across multiple numeric columns
+cor.test(df$age, df$income)                                # correlation test — also returns a p-value and confidence interval
+```
+`cor()` gives you just the coefficient; `cor.test()` gives you the full
+hypothesis test (p-value, confidence interval) — reach for `cor.test()`
+specifically when you need to report statistical significance, not just the
+raw correlation strength.
+
+## Hypothesis Tests
+
+### t-tests
+```r
+t.test(df$score)                                    # one-sample t-test against mu=0 by default
+t.test(df$score, mu = 100)                             # one-sample t-test against a specific value
+t.test(df$score ~ df$group)                                # two-sample t-test, comparing 'score' across levels of 'group'
+t.test(before, after, paired = TRUE)                           # paired t-test
+```
+The `~` (tilde) in `df$score ~ df$group` is R's **formula syntax** —
+reads as "score explained by group" — used extensively across R's
+statistical modeling functions (also seen in `lm()` below). This is a
+distinctly R-specific syntax pattern without a direct equivalent in
+scikit-learn's API style.
+
+### Chi-Squared Test (Categorical Association)
+```r
+table_data <- table(df$category, df$outcome)      # build a contingency table first
+chisq.test(table_data)
+```
+
+### ANOVA (Comparing Means Across 3+ Groups)
+```r
+model <- aov(score ~ group, data = df)
+summary(model)
+```
+
+### Shapiro-Wilk Test (Normality Check)
+```r
+shapiro.test(df$score)      # tests whether data plausibly comes from a normal distribution —
+                                # relevant before choosing a parametric vs. non-parametric test
+```
+
+## Linear Regression
+
+```r
+model <- lm(income ~ age + education_years, data = df)
+summary(model)
+```
+`lm()` (linear model) uses the same formula syntax as `t.test()` above —
+`income ~ age + education_years` reads as "income predicted by age and
+education_years." `summary(model)` prints coefficients, standard errors,
+t-values, p-values per predictor, and overall model fit statistics
+(R², adjusted R², F-statistic) — a much more statistically detailed default
+output than scikit-learn's `LinearRegression` (`sklearn-models-overview.md`),
+which only exposes `.coef_`/`.intercept_` without built-in significance
+testing. This difference reflects the two ecosystems' differing emphases:
+R leans toward inferential statistics (is this relationship statistically
+significant, and how confident are we), while scikit-learn leans toward
+predictive performance (how well does this generalize to new data).
+
+```r
+predict(model, newdata = new_df)          # generate predictions on new data, like sklearn's .predict()
+coef(model)                                  # extract just the coefficients
+confint(model)                                  # confidence intervals for each coefficient
+```
+
+### Logistic Regression
+```r
+model <- glm(outcome ~ age + income, data = df, family = "binomial")
+summary(model)
+```
+`glm()` (generalized linear model) with `family = "binomial"` is R's
+logistic regression — `family` also supports `"poisson"` (count data),
+`"gaussian"` (equivalent to `lm()`), and others, making `glm()` a more
+general tool than `lm()` for different response variable types.
+
+## Model Diagnostics
+
+```r
+plot(model)          # generates 4 standard diagnostic plots: residuals vs fitted, Q-Q plot,
+                         # scale-location, residuals vs leverage — checking regression assumptions visually
+```
+Producing these diagnostic plots with one line (`plot(model)`) is a
+notable convenience R offers over the more manual process typically needed
+to generate equivalent diagnostics in Python/scikit-learn.
+
+## Where R vs. Python Tend to Differ in Practice
+
+R's `lm()`/`glm()`/`t.test()`/etc. emphasize inferential statistics —
+p-values, confidence intervals, formal hypothesis testing — as first-class,
+default output. Python's scikit-learn (`sklearn-models-overview.md`)
+emphasizes predictive modeling workflows — train/test splits, cross-
+validation, deployment. Neither is strictly "better"; they reflect
+different traditions and use cases, and it's common (especially in
+research/pharma contexts) to reach for R specifically when the goal is
+rigorous statistical inference rather than pure predictive performance.
